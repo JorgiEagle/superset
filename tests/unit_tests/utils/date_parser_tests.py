@@ -677,6 +677,90 @@ def test_first_subunit_of_with_default_scope() -> None:
     assert result == (datetime(2016, 10, 1), datetime(2016, 11, 1))
 
 
+@patch("superset.utils.date_parser.parse_human_datetime", mock_parse_human_datetime)
+def test_nth_of_with_explicit_scope() -> None:
+    """Test ordinals beyond 'first' with explicit scope (single date)."""
+    # "second of this month" -> 2nd day of Nov 2016
+    result = get_since_until("second of this month : ")
+    assert result == (datetime(2016, 11, 2), None)
+
+    # "3rd of this month" -> 3rd day of Nov 2016
+    result = get_since_until("3rd of this month : ")
+    assert result == (datetime(2016, 11, 3), None)
+
+    # "fifth of last month" -> 5th day of Oct 2016
+    result = get_since_until("fifth of last month : ")
+    assert result == (datetime(2016, 10, 5), None)
+
+    # "2nd of this year" -> 2nd day of Jan 2016
+    result = get_since_until("2nd of this year : ")
+    assert result == (datetime(2016, 1, 2), None)
+
+
+@patch("superset.utils.date_parser.parse_human_datetime", mock_parse_human_datetime)
+def test_nth_of_with_default_scope() -> None:
+    """Test ordinals beyond 'first' with default scope (the [unit])."""
+    # "second of the month" -> 2nd day of Nov 2016
+    result = get_since_until("second of the month : ")
+    assert result == (datetime(2016, 11, 2), None)
+
+    # "3rd of the year" -> 3rd day of Jan 2016
+    result = get_since_until("3rd of the year : ")
+    assert result == (datetime(2016, 1, 3), None)
+
+    # "tenth of the month" -> 10th day of Nov 2016
+    result = get_since_until("tenth of the month : ")
+    assert result == (datetime(2016, 11, 10), None)
+
+
+@patch("superset.utils.date_parser.parse_human_datetime", mock_parse_human_datetime)
+def test_nth_subunit_of_with_explicit_scope() -> None:
+    """Test 'Nth [subunit] of [scope] [unit]' expressions that return a range."""
+    # "second week of this year" -> week 2: Jan 8 to Jan 15
+    result = get_since_until("second week of this year")
+    assert result == (datetime(2016, 1, 8), datetime(2016, 1, 15))
+
+    # "3rd month of this year" -> month 3: Mar 1 to Apr 1
+    result = get_since_until("3rd month of this year")
+    assert result == (datetime(2016, 3, 1), datetime(2016, 4, 1))
+
+    # "second month of this quarter" -> Nov 1 to Dec 1 (Q4 starts Oct 1)
+    result = get_since_until("second month of this quarter")
+    assert result == (datetime(2016, 11, 1), datetime(2016, 12, 1))
+
+    # "fourth week of last month" -> 4th week of Oct: Oct 22 to Oct 29
+    result = get_since_until("fourth week of last month")
+    assert result == (datetime(2016, 10, 22), datetime(2016, 10, 29))
+
+
+@patch("superset.utils.date_parser.parse_human_datetime", mock_parse_human_datetime)
+def test_nth_subunit_of_with_default_scope() -> None:
+    """Test 'Nth [subunit] of the [unit]' expressions that default to 'this'."""
+    # "second week of the year" -> week 2: Jan 8 to Jan 15
+    result = get_since_until("second week of the year")
+    assert result == (datetime(2016, 1, 8), datetime(2016, 1, 15))
+
+    # "third month of the year" -> Mar 1 to Apr 1
+    result = get_since_until("third month of the year")
+    assert result == (datetime(2016, 3, 1), datetime(2016, 4, 1))
+
+    # "2nd quarter of the year" -> Apr 1 to Jul 1
+    result = get_since_until("2nd quarter of the year")
+    assert result == (datetime(2016, 4, 1), datetime(2016, 7, 1))
+
+
+@patch("superset.utils.date_parser.parse_human_datetime", mock_parse_human_datetime)
+def test_nth_with_numeric_ordinals() -> None:
+    """Test bare digit ordinals (e.g., '3 week of this year')."""
+    # "2 week of this year" -> week 2: Jan 8 to Jan 15
+    result = get_since_until("2 week of this year")
+    assert result == (datetime(2016, 1, 8), datetime(2016, 1, 15))
+
+    # "4 month of this year" -> Apr 1 to May 1
+    result = get_since_until("4 month of this year")
+    assert result == (datetime(2016, 4, 1), datetime(2016, 5, 1))
+
+
 # Tests for bounded whitespace regex patterns in time_range_lookup
 @pytest.mark.parametrize(
     "time_range",
