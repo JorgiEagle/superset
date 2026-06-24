@@ -66,6 +66,47 @@ ORDINAL_MAP: dict[str, int] = {
     "1st": 1,
 }
 
+# Prefix -> expression mapping for calendar/Current range blocks used by
+# get_since_until to avoid repetitive if/startswith chains.
+CALENDAR_RANGE_EXPRESSIONS: dict[str, str] = {
+    "previous calendar week": (
+        "DATETRUNC(DATEADD(DATETIME('today'), -1, WEEK), WEEK)"
+        " : DATETRUNC(DATETIME('today'), WEEK)"
+    ),
+    "previous calendar month": (
+        "DATETRUNC(DATEADD(DATETIME('today'), -1, MONTH), MONTH)"
+        " : DATETRUNC(DATETIME('today'), MONTH)"
+    ),
+    "previous calendar quarter": (
+        "DATETRUNC(DATEADD(DATETIME('today'), -1, QUARTER), QUARTER)"
+        " : DATETRUNC(DATETIME('today'), QUARTER)"
+    ),
+    "previous calendar year": (
+        "DATETRUNC(DATEADD(DATETIME('today'), -1, YEAR), YEAR)"
+        " : DATETRUNC(DATETIME('today'), YEAR)"
+    ),
+    "Current day": (
+        "DATETRUNC(DATEADD(DATETIME('today'), 0, DAY), DAY)"
+        " : DATETRUNC(DATEADD(DATETIME('today'), 1, DAY), DAY)"
+    ),
+    "Current week": (
+        "DATETRUNC(DATEADD(DATETIME('today'), 0, WEEK), WEEK)"
+        " : DATETRUNC(DATEADD(DATETIME('today'), 1, WEEK), WEEK)"
+    ),
+    "Current month": (
+        "DATETRUNC(DATEADD(DATETIME('today'), 0, MONTH), MONTH)"
+        " : DATETRUNC(DATEADD(DATETIME('today'), 1, MONTH), MONTH)"
+    ),
+    "Current quarter": (
+        "DATETRUNC(DATEADD(DATETIME('today'), 0, QUARTER), QUARTER)"
+        " : DATETRUNC(DATEADD(DATETIME('today'), 1, QUARTER), QUARTER)"
+    ),
+    "Current year": (
+        "DATETRUNC(DATEADD(DATETIME('today'), 0, YEAR), YEAR)"
+        " : DATETRUNC(DATEADD(DATETIME('today'), 1, YEAR), YEAR)"
+    ),
+}
+
 
 def parse_human_datetime(human_readable: str) -> datetime:
     """Returns ``datetime.datetime`` from human readable strings"""
@@ -431,63 +472,11 @@ def get_since_until(  # pylint: disable=too-many-arguments,too-many-locals,too-m
     if time_range and time_range.startswith("Next") and separator not in time_range:
         time_range = _relative_start + separator + time_range
 
-    if (
-        time_range
-        and time_range.startswith("previous calendar week")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), -1, WEEK), WEEK) : DATETRUNC(DATETIME('today'), WEEK)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("previous calendar month")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), -1, MONTH), MONTH) : DATETRUNC(DATETIME('today'), MONTH)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("previous calendar quarter")
-        and separator not in time_range
-    ):
-        time_range = (
-            "DATETRUNC(DATEADD(DATETIME('today'), -1, QUARTER), QUARTER) : "
-            "DATETRUNC(DATETIME('today'), QUARTER)"  # noqa: E501
-        )
-    if (
-        time_range
-        and time_range.startswith("previous calendar year")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), -1, YEAR), YEAR) : DATETRUNC(DATETIME('today'), YEAR)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("Current day")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), 0, DAY), DAY) : DATETRUNC(DATEADD(DATETIME('today'), 1, DAY), DAY)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("Current week")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), 0, WEEK), WEEK) : DATETRUNC(DATEADD(DATETIME('today'), 1, WEEK), WEEK)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("Current month")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), 0, MONTH), MONTH) : DATETRUNC(DATEADD(DATETIME('today'), 1, MONTH), MONTH)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("Current quarter")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), 0, QUARTER), QUARTER) : DATETRUNC(DATEADD(DATETIME('today'), 1, QUARTER), QUARTER)"  # noqa: E501
-    if (
-        time_range
-        and time_range.startswith("Current year")
-        and separator not in time_range
-    ):
-        time_range = "DATETRUNC(DATEADD(DATETIME('today'), 0, YEAR), YEAR) : DATETRUNC(DATEADD(DATETIME('today'), 1, YEAR), YEAR)"  # noqa: E501
+    if time_range and separator not in time_range:
+        for prefix, expr in CALENDAR_RANGE_EXPRESSIONS.items():
+            if time_range.startswith(prefix):
+                time_range = expr
+                break
 
     # Handle "first [subunit] of [scope] [unit]" patterns that produce a range
     # e.g., "first week of this year" -> returns start of year to end of first week
