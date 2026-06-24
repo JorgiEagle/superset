@@ -64,8 +64,32 @@ logger = logging.getLogger(__name__)
 ORDINAL_MAP: dict[str, int] = {
     "first": 1,
     "1st": 1,
+    "second": 2,
+    "2nd": 2,
+    "third": 3,
+    "3rd": 3,
+    "fourth": 4,
+    "4th": 4,
+    "fifth": 5,
+    "5th": 5,
+    "sixth": 6,
+    "6th": 6,
+    "seventh": 7,
+    "7th": 7,
+    "eighth": 8,
+    "8th": 8,
+    "ninth": 9,
+    "9th": 9,
+    "tenth": 10,
+    "10th": 10,
+    "eleventh": 11,
+    "11th": 11,
+    "twelfth": 12,
+    "12th": 12,
 }
 
+# Regex alternation matching any key in ORDINAL_MAP or a bare digit sequence
+_ORDINAL_RE = "(" + "|".join(re.escape(k) for k in ORDINAL_MAP) + r"|\d+)"
 # Prefix -> expression mapping for calendar/Current range blocks used by
 # get_since_until to avoid repetitive if/startswith chains.
 CALENDAR_RANGE_EXPRESSIONS: dict[str, str] = {
@@ -290,14 +314,15 @@ def handle_nth_of(
     relative_start: str | None,
 ) -> str:
     """
-    Handles "first" time expressions like "first of the month" or
-    "first week of this year".
+    Handles Nth-of time expressions like "first of the month",
+    "second week of this year", or "3rd month of last quarter".
 
     This handler returns either a single date expression or a range expression
     depending on whether a subunit is provided.
 
     Args:
-        ordinal: The ordinal word or number ("first", "1st")
+        ordinal: The ordinal word or number ("first", "1st", "second", "2nd", …,
+            or a bare digit string like "3")
         subunit: The smaller time unit ("week", "day", "month") or None
         scope: Time scope ("this", "last", "next", "prior") or None
             (defaults to "this")
@@ -307,14 +332,14 @@ def handle_nth_of(
     Returns:
         - Single date expression if subunit is None (e.g., "first of the month")
         - Range expression "since : until" if subunit is provided
-          (e.g., "first week of year")
+          (e.g., "second week of year")
 
     Examples:
         >>> handle_nth_of("first", None, "this", "month", None)
         "DATETRUNC(DATETIME('today'), month)"
 
-        >>> handle_nth_of("first", "week", "this", "year", None)
-        "DATETRUNC(..., year) : DATEADD(DATETRUNC(..., year), 1, week)"
+        >>> handle_nth_of("second", "week", "this", "year", None)
+        "DATEADD(DATETRUNC(..., year), 1, week) : DATEADD(..., 1, week)"
     """
     # Convert ordinal to number
     n = ORDINAL_MAP.get(ordinal.lower(), int(ordinal) if ordinal.isdigit() else 1)
@@ -327,8 +352,10 @@ def handle_nth_of(
     start_of_unit = f"DATETRUNC({base_expr}, {unit.lower()})"
 
     if subunit is None:
-        # "first of the month" -> single date (first day of the unit)
-        return start_of_unit
+        # "Nth of the month" -> single date (Nth day of the unit)
+        if n == 1:
+            return start_of_unit
+        return f"DATEADD({start_of_unit}, {n - 1}, day)"
     else:
         # "first week of the year" -> range
         # Start: beginning of unit + (n-1) subunits
@@ -485,7 +512,7 @@ def get_since_until(  # pylint: disable=too-many-arguments,too-many-locals,too-m
     # return a single date, not a range. Those are handled in time_range_lookup below.
     if time_range and separator not in time_range:
         nth_subunit_pattern = (
-            r"^(first|1st)\s{1,5}"
+            r"^" + _ORDINAL_RE + r"\s{1,5}"
             r"(week|month|quarter)\s{1,5}of\s{1,5}"
             r"(?:(this|last|next|prior)\s{1,5})?"
             r"(?:the\s{1,5})?"
@@ -512,9 +539,9 @@ def get_since_until(  # pylint: disable=too-many-arguments,too-many-locals,too-m
                 ),
             ),
             (
-                # Pattern for "first of [scope] [unit]" - single date
-                # e.g., "first of this month", "first of last year"
-                r"^(first|1st)\s{1,5}"
+                # Pattern for "Nth of [scope] [unit]" - single date
+                # e.g., "first of this month", "second of last year"
+                r"^" + _ORDINAL_RE + r"\s{1,5}"
                 r"(?:day\s{1,5})?of\s{1,5}"
                 r"(this|last|next|prior)\s{1,5}"
                 r"(day|week|month|quarter|year)s?$",
@@ -523,9 +550,9 @@ def get_since_until(  # pylint: disable=too-many-arguments,too-many-locals,too-m
                 ),
             ),
             (
-                # Pattern for "first of the [unit]" - single date with default scope
-                # e.g., "first of the month", "first day of the year"
-                r"^(first|1st)\s{1,5}"
+                # Pattern for "Nth of the [unit]" - single date with default scope
+                # e.g., "first of the month", "3rd day of the year"
+                r"^" + _ORDINAL_RE + r"\s{1,5}"
                 r"(?:day\s{1,5})?of\s{1,5}"
                 r"(?:the\s{1,5})?"
                 r"(week|month|quarter|year)$",
