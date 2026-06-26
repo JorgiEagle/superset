@@ -28,6 +28,7 @@ from superset.commands.chart.exceptions import (
     TimeRangeParseFailError,
 )
 from superset.utils.date_parser import (
+    add_ago_to_since,
     DateRangeMigration,
     datetime_eval,
     get_past_or_future,
@@ -282,6 +283,71 @@ def test_get_since_until() -> None:
 
     with pytest.raises(ValueError):  # noqa: PT011
         get_since_until(time_range="tomorrow : yesterday")
+
+
+def test_add_ago_to_since() -> None:
+    # Every canonical relative-time unit, singular and plural, gets " ago".
+    for unit in (
+        "second",
+        "minute",
+        "hour",
+        "day",
+        "week",
+        "month",
+        "quarter",
+        "year",
+    ):
+        assert add_ago_to_since(f"1 {unit}") == f"1 {unit} ago"
+        assert add_ago_to_since(f"3 {unit}s") == f"3 {unit}s ago"
+
+    # Case-insensitive and whitespace-tolerant.
+    assert add_ago_to_since("7 Minutes") == "7 Minutes ago"
+    assert add_ago_to_since("  2 months  ") == "  2 months   ago"
+
+    # Values already ending in ago/later are left unchanged (no double append).
+    assert add_ago_to_since("5 days ago") == "5 days ago"
+    assert add_ago_to_since("5 days later") == "5 days later"
+
+    # Non bare-relative values are left unchanged.
+    assert add_ago_to_since("Last week") == "Last week"
+    assert add_ago_to_since("2018-01-01T00:00:00") == "2018-01-01T00:00:00"
+
+
+def test_get_since_until_relative_units() -> None:
+    # Previously-broken units must resolve to a past date instead of raising
+    # TimeRangeAmbiguousError. The freeze date keeps month/quarter math stable.
+    with freezegun.freeze_time("2021-03-15"):
+        assert get_since_until(since="7 minutes", until="now") == (
+            datetime(2021, 3, 14, 23, 53),
+            datetime(2021, 3, 15),
+        )
+        assert get_since_until(since="30 seconds", until="now") == (
+            datetime(2021, 3, 14, 23, 59, 30),
+            datetime(2021, 3, 15),
+        )
+        assert get_since_until(since="1 hour", until="now") == (
+            datetime(2021, 3, 14, 23),
+            datetime(2021, 3, 15),
+        )
+        assert get_since_until(since="1 week", until="now") == (
+            datetime(2021, 3, 8),
+            datetime(2021, 3, 15),
+        )
+        assert get_since_until(since="1 month", until="now") == (
+            datetime(2021, 2, 15),
+            datetime(2021, 3, 15),
+        )
+        # Units that already worked keep working.
+        assert get_since_until(since="2 years", until="now") == (
+            datetime(2019, 3, 15),
+            datetime(2021, 3, 15),
+        )
+        # "quarter" is normalized consistently with the other units (see
+        # test_add_ago_to_since), but the underlying parsedatetime/dateutil
+        # parser cannot resolve "quarter", so it surfaces a parse failure
+        # rather than the ambiguity error.
+        with pytest.raises(TimeRangeParseFailError):
+            get_since_until(since="3 quarters", until="now")
 
 
 @with_feature_flags(CHART_PLUGINS_EXPERIMENTAL=True)

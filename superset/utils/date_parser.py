@@ -66,10 +66,25 @@ ORDINAL_MAP: dict[str, int] = {
     "1st": 1,
 }
 
+# Canonical set of relative-time units recognized across the date parser.
+# Shared so the ambiguity guard, the time-delta normalizer, and the legacy
+# ``add_ago_to_since`` rescue path cannot drift out of sync.
+RELATIVE_TIME_UNITS: tuple[str, ...] = (
+    "second",
+    "minute",
+    "hour",
+    "day",
+    "week",
+    "month",
+    "quarter",
+    "year",
+)
+_RELATIVE_TIME_UNITS_RE = "|".join(RELATIVE_TIME_UNITS)
+
 
 def parse_human_datetime(human_readable: str) -> datetime:
     """Returns ``datetime.datetime`` from human readable strings"""
-    x_periods = r"^\s*([0-9]+)\s+(second|minute|hour|day|week|month|quarter|year)s?\s*$"
+    x_periods = rf"^\s*([0-9]+)\s+({_RELATIVE_TIME_UNITS_RE})s?\s*$"
     if re.search(x_periods, human_readable, re.IGNORECASE):
         raise TimeRangeAmbiguousError(human_readable)
     try:
@@ -90,7 +105,7 @@ def parse_human_datetime(human_readable: str) -> datetime:
 
 
 def normalize_time_delta(human_readable: str) -> dict[str, int]:
-    x_unit = r"^\s*([0-9]+)\s+(second|minute|hour|day|week|month|quarter|year)s?\s+(ago|later)*$"  # noqa: E501
+    x_unit = rf"^\s*([0-9]+)\s+({_RELATIVE_TIME_UNITS_RE})s?\s+(ago|later)*$"  # noqa: E501
     matched = re.match(x_unit, human_readable, re.IGNORECASE)
     if not matched:
         raise TimeDeltaAmbiguousError(human_readable)
@@ -662,9 +677,8 @@ def add_ago_to_since(since: str) -> str:
     :returns: Since with ago added if necessary
     :rtype: str
     """
-    since_words = since.split(" ")
-    grains = ["days", "years", "hours", "day", "year", "weeks"]
-    if len(since_words) == 2 and since_words[1] in grains:
+    bare_relative = rf"^\s*[0-9]+\s+({_RELATIVE_TIME_UNITS_RE})s?\s*$"
+    if re.match(bare_relative, since, re.IGNORECASE):
         since += " ago"
     return since
 
